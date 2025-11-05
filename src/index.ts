@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import 'dotenv/config';
 import { Command } from 'commander';
+<<<<<<< HEAD
 import { appendAction, getSnapshot, saveSnapshot, getCachedPlan, cachePlan, toSteps, Step } from './memory';
 import { captureAccessibilitySnapshot, openPage } from './accessibility';
 import { planFromInstruction } from './llm';
@@ -8,6 +9,12 @@ import { performPlannedAction } from './actions';
 import { executeToolCall, ToolCall } from './tools';
 import { preflightDismiss } from './preflight';
 import fs from 'fs';
+=======
+import { appendAction, getSnapshot, saveSnapshot, getCachedPlan, cachePlan } from './memory';
+import { captureAccessibilitySnapshot, openPage } from './accessibility';
+import { planFromInstruction } from './llm';
+import { performPlannedAction } from './actions';
+>>>>>>> 97dfd982b80a2c7e685e2aae966e02be7af3c0ca
 
 const program = new Command();
 program
@@ -43,6 +50,7 @@ program
     }
 
     // Use cached plan if available and not disabled
+<<<<<<< HEAD
     let planOrSteps = (!opts.refreshPlan && opts.cache !== false) ? getCachedPlan(url, instruction) : undefined;
     if (planOrSteps) {
       console.log('Using cached plan:', planOrSteps);
@@ -50,10 +58,20 @@ program
       planOrSteps = await planFromInstruction(instruction, snap.axTree);
       console.log('Plan:', planOrSteps);
       cachePlan(url, instruction, planOrSteps as any);
+=======
+    let plan = (!opts.refreshPlan && opts.cache !== false) ? getCachedPlan(url, instruction) : undefined;
+    if (plan) {
+      console.log('Using cached plan:', plan);
+    } else {
+      plan = await planFromInstruction(instruction, snap.axTree);
+      console.log('Plan:', plan);
+      cachePlan(url, instruction, plan);
+>>>>>>> 97dfd982b80a2c7e685e2aae966e02be7af3c0ca
     }
 
     const { browser, page } = await openPage(url);
     try {
+<<<<<<< HEAD
       // Best-effort dismiss common interstitials/banners
       await preflightDismiss(page);
 
@@ -202,6 +220,30 @@ program
             process.exitCode = 1;
             break;
           }
+=======
+      let rec = await performPlannedAction(page, url, plan);
+      appendAction(url, rec);
+      if (rec.outcome === 'success') {
+        console.log('Action success');
+      } else {
+        console.error('Action failed:', rec.error);
+        // Optional fallback to LLM if cached plan failed
+        if ((opts.fallback !== false) && (!opts.refreshPlan)) {
+          console.log('Falling back to LLM to refresh plan...');
+          const freshPlan = await planFromInstruction(instruction, snap!.axTree);
+          console.log('Refreshed plan:', freshPlan);
+          cachePlan(url, instruction, freshPlan);
+          rec = await performPlannedAction(page, url, freshPlan);
+          appendAction(url, rec);
+          if (rec.outcome === 'success') {
+            console.log('Action success after fallback');
+          } else {
+            console.error('Action still failed after fallback:', rec.error);
+            process.exitCode = 1;
+          }
+        } else {
+          process.exitCode = 1;
+>>>>>>> 97dfd982b80a2c7e685e2aae966e02be7af3c0ca
         }
       }
     } finally {

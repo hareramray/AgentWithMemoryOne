@@ -70,6 +70,7 @@ On each run, the tool:
 
 1. Loads an existing AX snapshot for the URL (or captures a new one)
 2. Checks the plan cache for this URL + instruction; if present, uses it to avoid an LLM call
+<<<<<<< HEAD
 3. Otherwise, asks Gemini to plan the action(s). The model may return a single action or a multi-step plan: `{ steps: [...] }`
 4. Executes steps sequentially via Playwright (click/type/press)
 5. Caches the final steps so next runs are memory-only (no LLM)
@@ -129,6 +130,11 @@ You can also wrap the list as `{ "calls": [ ... ] }`.
 - First time you run a new instruction on a URL, the LLM produces a plan. The agent executes it and saves the resulting step list in memory.
 - Next time you run the same instruction, the agent finds the saved steps and executes directly from memory—no LLM call.
 - If a step fails (page changed), by default it will try refreshing the plan once via the LLM and update the cache. Disable this with `--no-fallback`.
+=======
+3. Otherwise, asks Gemini to plan the action and returns JSON: `{ action, ref: { role, name? }, value? }`, then caches it
+4. Launches Playwright, resolves the ref via `page.getByRole(ref.role, { name })`, and executes the action
+5. Appends the action record to memory
+>>>>>>> 97dfd982b80a2c7e685e2aae966e02be7af3c0ca
 
 ## Memory layout
 
