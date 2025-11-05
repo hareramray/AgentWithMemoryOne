@@ -70,9 +70,65 @@ On each run, the tool:
 
 1. Loads an existing AX snapshot for the URL (or captures a new one)
 2. Checks the plan cache for this URL + instruction; if present, uses it to avoid an LLM call
-3. Otherwise, asks Gemini to plan the action and returns JSON: `{ action, ref: { role, name? }, value? }`, then caches it
-4. Launches Playwright, resolves the ref via `page.getByRole(ref.role, { name })`, and executes the action
-5. Appends the action record to memory
+3. Otherwise, asks Gemini to plan the action(s). The model may return a single action or a multi-step plan: `{ steps: [...] }`
+4. Executes steps sequentially via Playwright (click/type/press)
+5. Caches the final steps so next runs are memory-only (no LLM)
+6. Appends the action record(s) to memory
+
+### Auto-submit after typing
+
+When your instruction implies submission (e.g., includes phrases like "press enter", "then do a search", or just "search" after a type), the agent will automatically press Enter after typing. This avoids additional LLM calls for common flows like search boxes.
+
+To force only typing without submitting, avoid those keywords, e.g.:
+
+```powershell
+node dist/index.js run "https://google.com" 'type "OpenAI" into the searchbox'
+```
+
+### Direct tool calls (no LLM)
+
+You can execute Playwright actions through a structured tool-call interface. This avoids any LLM usage and lets you provide the ref directly.
+
+Examples:
+
+```powershell
+# Click a button by role/name
+node dist/index.js tool "https://example.com" '{"name":"playwright.click","params":{"ref":{"role":"button","name":"Sign in"}}}'
+
+# Type into a textbox (combobox/textbox role)
+node dist/index.js tool "https://google.com" '{"name":"playwright.type","params":{"ref":{"role":"combobox","name":"Search"},"value":"OpenAI"}}'
+
+# Press a key (e.g., Enter)
+node dist/index.js tool "https://google.com" '{"name":"playwright.press","params":{"value":"Enter"}}'
+```
+
+The tool call execution records in memory just like `run`, and ensures a snapshot exists for the URL.
+
+### Batch tool calls (sequence)
+
+Run a list of tool calls in order. This is useful for multi-step flows like type-then-press.
+
+```powershell
+# tools-example.json (array form)
+[
+	{"name":"playwright.type","params":{"ref":{"role":"combobox","name":"Search"},"value":"OpenAI"}},
+	{"name":"playwright.press","params":{"value":"Enter"}}
+]
+
+# Execute the batch
+node dist/index.js tools "https://google.com" placeholder --file tools-example.json
+
+# Continue even if one step fails
+node dist/index.js tools "https://example.com" placeholder --file tools-example.json --continue-on-error
+```
+
+You can also wrap the list as `{ "calls": [ ... ] }`.
+
+## Memory-first flow
+
+- First time you run a new instruction on a URL, the LLM produces a plan. The agent executes it and saves the resulting step list in memory.
+- Next time you run the same instruction, the agent finds the saved steps and executes directly from memory—no LLM call.
+- If a step fails (page changed), by default it will try refreshing the plan once via the LLM and update the cache. Disable this with `--no-fallback`.
 
 ## Memory layout
 

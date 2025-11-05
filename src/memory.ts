@@ -23,13 +23,13 @@ export type SnapshotRecord = {
   axTree: any;
 };
 
+export type Step = { action: 'click' | 'type' | 'press'; ref?: Ref; value?: string };
+
 export type CachedPlan = {
   timestamp: number;
-  plan: {
-    action: 'click' | 'type' | 'press';
-    ref: Ref;
-    value?: string;
-  };
+  // Prefer multi-step plans; maintain backward compat with single-step plan
+  steps?: Step[];
+  plan?: { action: 'click' | 'type' | 'press'; ref: Ref; value?: string };
 };
 
 export type MemoryData = {
@@ -97,17 +97,28 @@ export function normalizeInstruction(instr: string): string {
     .trim();
 }
 
-export function cachePlan(url: string, instruction: string, plan: { action: 'click'|'type'|'press'; ref: Ref; value?: string }) {
+export function cachePlan(url: string, instruction: string, plan: { action: 'click'|'type'|'press'; ref: Ref; value?: string } | { steps: Step[] }) {
   const mem = loadMemory();
   if (!mem.plans) (mem as any).plans = {} as MemoryData['plans'];
   if (!mem.plans[url]) mem.plans[url] = {};
   const key = normalizeInstruction(instruction);
-  mem.plans[url][key] = { timestamp: Date.now(), plan };
+  const entry: CachedPlan = { timestamp: Date.now() };
+  if ('steps' in plan) entry.steps = plan.steps;
+  else entry.plan = plan;
+  mem.plans[url][key] = entry;
   saveMemory(mem);
 }
 
-export function getCachedPlan(url: string, instruction: string): { action: 'click'|'type'|'press'; ref: Ref; value?: string } | undefined {
+export function getCachedPlan(url: string, instruction: string): ({ action: 'click'|'type'|'press'; ref: Ref; value?: string } | { steps: Step[] }) | undefined {
   const mem = loadMemory();
   const entry = mem.plans?.[url]?.[normalizeInstruction(instruction)];
-  return entry?.plan;
+  if (!entry) return undefined;
+  if (entry.steps && entry.steps.length) return { steps: entry.steps };
+  if (entry.plan) return entry.plan;
+  return undefined;
+}
+
+export function toSteps(input: { action: 'click'|'type'|'press'; ref: Ref; value?: string } | { steps: Step[] }): Step[] {
+  if ('steps' in input) return input.steps;
+  return [{ action: input.action, ref: input.ref, value: input.value }];
 }

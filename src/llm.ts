@@ -53,7 +53,7 @@ function collectInteractiveNodes(root: SimplifiedAxNode, out: SimplifiedAxNode[]
   return out;
 }
 
-const PlanSchema = z.object({
+const SinglePlanSchema = z.object({
   action: z.enum(['click', 'type', 'press']).describe('User-intended action'),
   ref: z.object({
     role: z.string(),
@@ -62,7 +62,11 @@ const PlanSchema = z.object({
   }).describe('Element reference via ARIA role and accessible name'),
   value: z.string().optional().describe('Text to type or key to press depending on action'),
 });
-export type ActionPlan = z.infer<typeof PlanSchema>;
+const StepsSchema = z.object({
+  steps: z.array(SinglePlanSchema).min(1),
+});
+
+export type ActionPlan = z.infer<typeof SinglePlanSchema> | z.infer<typeof StepsSchema>;
 
 export async function planFromInstruction(instruction: string, axTree: any): Promise<ActionPlan> {
   const simplified = simplifyAxTree(axTree);
@@ -71,7 +75,7 @@ export async function planFromInstruction(instruction: string, axTree: any): Pro
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 
-  const prompt = `You are mapping a natural language instruction to a web element using the accessibility tree. \n\nInstruction: "${instruction}"\n\nYou will receive a list of interactive nodes with their roles and accessible names. Choose the best match and output strict JSON with: { action, ref: { role, name?, description? }, value? }.\n- Use action=click for navigation or taps.\n- Use action=type for text entry, and set value to the text to type when instruction contains text in quotes or after words like \"type\", \"enter\".\n- Use action=press if the instruction is to press a key (e.g., Enter).\n- Prefer exact name matches; otherwise, use closest semantic.\n- If multiple candidates exist, choose the most prominent (e.g., primary button).\nReturn JSON only.`;
+  const prompt = `You are mapping a natural language instruction to web actions using the accessibility tree. \n\nInstruction: "${instruction}"\n\nReturn STRICT JSON only in one of two forms:\n1) { "steps": [ { "action": "click|type|press", "ref": { "role": "...", "name?": "..." }, "value?": "..." }, ... ] } for multi-step intents (e.g., type then press Enter)\n2) { "action": "click|type|press", "ref": { "role": "...", "name?": "..." }, "value?": "..." } for single-step intents.\n\nGuidelines:\n- Use action=type for text entry; put the text into value.\n- Use action=press for keypresses like Enter.\n- Prefer exact accessible name matches; otherwise use the closest semantic.\n- Choose the most prominent element if multiple candidates exist.\n- Do not include any commentary, only the JSON.`;
 
   const nodesJson = JSON.stringify(items);
   const input = `${prompt}\n\nInteractiveNodes: ${nodesJson}`;
@@ -96,6 +100,12 @@ export async function planFromInstruction(instruction: string, axTree: any): Pro
   } catch (e) {
     throw new Error(`Gemini returned non-JSON or malformed output: ${text}`);
   }
-  const plan = PlanSchema.parse(parsed);
-  return plan;
+  // Try steps first, then single
+  try {
+    const stepsPlan = StepsSchema.parse(parsed);
+    return stepsPlan;
+  } catch {
+    const singlePlan = SinglePlanSchema.parse(parsed);
+    return singlePlan;
+  }
 }
