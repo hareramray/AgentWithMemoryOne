@@ -1,0 +1,27 @@
+{
+  "name": "agent-with-memory-one",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "dev": "ts-node src/index.ts",
+    "start": "node dist/index.js",
+    "prepare": "playwright install --with-deps"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "playwright": "^1.47.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "@types/dotenv": "^8.2.0",
+    "@types/commander": "^2.12.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  }
+}

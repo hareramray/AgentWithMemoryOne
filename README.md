@@ -1,0 +1,122 @@
+# Agent With Memory (Playwright + Gemini 2.5 Pro)
+
+Capture a page's accessibility tree, use Gemini to map natural language instructions to element refs (role/name), execute actions via Playwright, and store memory for reuse across runs.
+
+## Features
+
+- Snapshot and persist the accessibility (AX) tree per URL
+- Use Gemini 2.5 Pro to select an element "ref" (role/name) from the AX tree based on your instruction
+- Execute actions in Playwright (click, type, press)
+- Append action history and reuse the stored snapshot in future runs
+
+## Requirements
+
+- Node.js 18+ (for native `fetch` and modern Playwright)
+- A Google AI Studio API key with access to Gemini 2.5 Pro
+
+## Setup
+
+1. Copy `.env.example` to `.env` and fill in your API key:
+
+```
+GEMINI_API_KEY=your_key_here
+HEADLESS=true
+NAVIGATION_TIMEOUT_MS=30000
+```
+
+2. Install dependencies:
+
+```powershell
+# In Windows PowerShell
+npm install
+```
+
+3. Download Playwright browsers (happens automatically on first install via `prepare`):
+
+```powershell
+npm run prepare
+```
+
+4. Build the project:
+
+```powershell
+npm run build
+```
+
+## Usage
+
+Two main commands: `snapshot` and `run`.
+
+- Capture the AX tree for a URL and store it in `data/memory.json`:
+
+```powershell
+node dist/index.js snapshot "https://example.com"
+```
+
+- Execute a natural language instruction on a URL. By default, it reuses the stored snapshot if available. Add `--fresh` to recapture first.
+
+```powershell
+# Click a primary button
+node dist/index.js run "https://example.com" "click the Sign in button"
+
+# Type into a field
+node dist/index.js run "https://example.com/login" "type \"user@example.com\" into the Email textbox"
+
+# Force refresh the snapshot
+node dist/index.js run "https://example.com" "open the Pricing page" --fresh
+```
+
+On each run, the tool:
+
+1. Loads an existing AX snapshot for the URL (or captures a new one)
+2. Checks the plan cache for this URL + instruction; if present, uses it to avoid an LLM call
+3. Otherwise, asks Gemini to plan the action and returns JSON: `{ action, ref: { role, name? }, value? }`, then caches it
+4. Launches Playwright, resolves the ref via `page.getByRole(ref.role, { name })`, and executes the action
+5. Appends the action record to memory
+
+## Memory layout
+
+Memory is persisted to `data/memory.json` with two sections:
+
+- `snapshots[url]`: the last captured AX tree for that URL
+- `actions[url]`: an array of action records (plan, result)
+- `plans[url][normalizedInstruction]`: cached plan returned by Gemini, reused on subsequent runs
+
+You can safely delete `data/memory.json` to start fresh.
+
+## Notes and limitations
+
+- The AX-based refs are `{ role, name }` pairs, which are stable and human-readable. They are not the MCP tool's ephemeral element `ref` strings; instead, Playwright resolves them at runtime.
+- If a page changes significantly, an old snapshot may be misleading. Use `--fresh` to recapture before planning.
+- The default Gemini model is `gemini-2.5-pro`. If your key doesn't have access, set `GEMINI_MODEL` in `.env` to a supported model (e.g., `gemini-2.5-pro`).
+
+### Caching behavior and flags
+
+- By default, the agent reuses a cached plan for the same URL + instruction to avoid LLM costs.
+- Disable the cache for a single run:
+
+```powershell
+node dist/index.js run "https://example.com" "click the Login button" --no-cache
+```
+
+- Force refresh a plan from the LLM and update the cache:
+
+```powershell
+node dist/index.js run "https://example.com" "click the Login button" --refresh-plan
+```
+
+- If a cached plan fails (e.g., page changed), the agent falls back to the LLM once by default. Disable fallback with:
+
+```powershell
+node dist/index.js run "https://example.com" "click the Login button" --no-fallback
+```
+
+## Troubleshooting
+
+- If Playwright can't find the element, try refining the instruction to include the visible button/link text, or use `--fresh` to resnapshot.
+- Ensure Node.js 18+ is used. For Windows PowerShell, run commands exactly as shown above with quotes.
+- If Gemini returns non-JSON, the tool will report an error. Re-run with a clearer instruction.
+
+## License
+
+MIT
