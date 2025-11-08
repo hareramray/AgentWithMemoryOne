@@ -1,14 +1,25 @@
 import dotenv from 'dotenv';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
 import { z } from 'zod';
 
 dotenv.config();
 
+const LLM_PROVIDER = (process.env.LLM_PROVIDER || 'openai').toLowerCase();
+
+// Gemini config
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-pro';
 
-if (!GEMINI_API_KEY) {
+// OpenAI config
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+
+if (LLM_PROVIDER === 'gemini' && !GEMINI_API_KEY) {
   console.warn('GEMINI_API_KEY is not set. Please set it in .env');
+}
+if (LLM_PROVIDER === 'openai' && !OPENAI_API_KEY) {
+  console.warn('OPENAI_API_KEY is not set. Please set it in .env');
 }
 
 export type SimplifiedAxNode = {
@@ -72,16 +83,31 @@ export async function planFromInstruction(instruction: string, axTree: any): Pro
   const simplified = simplifyAxTree(axTree);
   const items = collectInteractiveNodes(simplified, []).slice(0, 4000); // cap to keep prompt reasonable
 
-  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
-
   const prompt = `You are mapping a natural language instruction to web actions using the accessibility tree. \n\nInstruction: "${instruction}"\n\nReturn STRICT JSON only in one of two forms:\n1) { "steps": [ { "action": "click|type|press", "ref": { "role": "...", "name?": "..." }, "value?": "..." }, ... ] } for multi-step intents (e.g., type then press Enter)\n2) { "action": "click|type|press", "ref": { "role": "...", "name?": "..." }, "value?": "..." } for single-step intents.\n\nGuidelines:\n- Use action=type for text entry; put the text into value.\n- Use action=press for keypresses like Enter.\n- Prefer exact accessible name matches; otherwise use the closest semantic.\n- Choose the most prominent element if multiple candidates exist.\n- Do not include any commentary, only the JSON.`;
 
   const nodesJson = JSON.stringify(items);
   const input = `${prompt}\n\nInteractiveNodes: ${nodesJson}`;
 
-  const resp = await model.generateContent({ contents: [{ role: 'user', parts: [{ text: input }] }] });
-  const text = resp.response.text().trim();
+  let text: string;
+  if (LLM_PROVIDER === 'openai') {
+    const client = new OpenAI({ apiKey: OPENAI_API_KEY });
+    // Prefer Chat Completions with JSON object response
+    const resp = await client.chat.completions.create({
+      model: OPENAI_MODEL,
+      response_format: { type: 'json_object' as const },
+      messages: [
+        { role: 'system', content: 'Return only valid JSON object compliant with the schema described. No explanations.' },
+        { role: 'user', content: input },
+      ]
+      // Some OpenAI mini models enforce default temperature only; omit when unsupported.
+    });
+    text = (resp.choices?.[0]?.message?.content || '').trim();
+  } else {
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+    const resp = await model.generateContent({ contents: [{ role: 'user', parts: [{ text: input }] }] });
+    text = resp.response.text().trim();
+  }
 
   // Try to extract JSON robustly: handle fenced code blocks and stray text
   let candidate = text;
@@ -98,7 +124,8 @@ export async function planFromInstruction(instruction: string, axTree: any): Pro
   try {
     parsed = JSON.parse(jsonText);
   } catch (e) {
-    throw new Error(`Gemini returned non-JSON or malformed output: ${text}`);
+    const who = LLM_PROVIDER === 'openai' ? 'OpenAI' : 'Gemini';
+    throw new Error(`${who} returned non-JSON or malformed output: ${text}`);
   }
   // Try steps first, then single
   try {

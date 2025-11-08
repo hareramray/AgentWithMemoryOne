@@ -12,7 +12,7 @@ import fs from 'fs';
 const program = new Command();
 program
   .name('agent-with-memory-one')
-  .description('Capture accessibility tree, use Gemini 2.5 Pro to plan, and execute actions via Playwright with memory.')
+  .description('Capture accessibility tree, use Gemini or OpenAI to plan actions, and execute via Playwright with memory/cache.')
   .version('0.1.0');
 
 program

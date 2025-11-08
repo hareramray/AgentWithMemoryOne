@@ -1,6 +1,6 @@
-# Agent With Memory (Playwright + Gemini 2.5 Pro)
+# Agent With Memory (Playwright + Gemini/OpenAI)
 
-Capture a page's accessibility tree, use Gemini to map natural language instructions to element refs (role/name), execute actions via Playwright, and store memory for reuse across runs.
+Capture a page's accessibility tree, use Gemini or OpenAI to map natural language instructions to element refs (role/name), execute actions via Playwright, and store memory for reuse across runs.
 
 ## Features
 
@@ -12,14 +12,24 @@ Capture a page's accessibility tree, use Gemini to map natural language instruct
 ## Requirements
 
 - Node.js 18+ (for native `fetch` and modern Playwright)
-- A Google AI Studio API key with access to Gemini 2.5 Pro
+- A Google AI Studio API key (for Gemini), or an OpenAI API key (for OpenAI)
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and fill in your API key:
+1. Copy `.env.example` to `.env` and fill in your API key(s). If you do nothing, the default provider is OpenAI:
 
 ```
-GEMINI_API_KEY=your_key_here
+# One of: gemini | openai
+LLM_PROVIDER=openai
+
+# Gemini settings
+GEMINI_API_KEY=your_gemini_key
+GEMINI_MODEL=gemini-2.5-pro
+
+# OpenAI settings
+OPENAI_API_KEY=your_openai_key
+OPENAI_MODEL=gpt-4o-mini
+
 HEADLESS=true
 NAVIGATION_TIMEOUT_MS=30000
 ```
@@ -70,8 +80,7 @@ On each run, the tool:
 
 1. Loads an existing AX snapshot for the URL (or captures a new one)
 2. Checks the plan cache for this URL + instruction; if present, uses it to avoid an LLM call
-<<<<<<< HEAD
-3. Otherwise, asks Gemini to plan the action(s). The model may return a single action or a multi-step plan: `{ steps: [...] }`
+3. Otherwise, asks the selected LLM (Gemini or OpenAI) to plan the action(s). The model may return a single action or a multi-step plan: `{ steps: [...] }`
 4. Executes steps sequentially via Playwright (click/type/press)
 5. Caches the final steps so next runs are memory-only (no LLM)
 6. Appends the action record(s) to memory
@@ -130,11 +139,6 @@ You can also wrap the list as `{ "calls": [ ... ] }`.
 - First time you run a new instruction on a URL, the LLM produces a plan. The agent executes it and saves the resulting step list in memory.
 - Next time you run the same instruction, the agent finds the saved steps and executes directly from memory—no LLM call.
 - If a step fails (page changed), by default it will try refreshing the plan once via the LLM and update the cache. Disable this with `--no-fallback`.
-=======
-3. Otherwise, asks Gemini to plan the action and returns JSON: `{ action, ref: { role, name? }, value? }`, then caches it
-4. Launches Playwright, resolves the ref via `page.getByRole(ref.role, { name })`, and executes the action
-5. Appends the action record to memory
->>>>>>> 97dfd982b80a2c7e685e2aae966e02be7af3c0ca
 
 ## Memory layout
 
@@ -142,7 +146,7 @@ Memory is persisted to `data/memory.json` with two sections:
 
 - `snapshots[url]`: the last captured AX tree for that URL
 - `actions[url]`: an array of action records (plan, result)
-- `plans[url][normalizedInstruction]`: cached plan returned by Gemini, reused on subsequent runs
+- `plans[url][normalizedInstruction]`: cached plan returned by the LLM (Gemini or OpenAI), reused on subsequent runs
 
 You can safely delete `data/memory.json` to start fresh.
 
@@ -150,7 +154,9 @@ You can safely delete `data/memory.json` to start fresh.
 
 - The AX-based refs are `{ role, name }` pairs, which are stable and human-readable. They are not the MCP tool's ephemeral element `ref` strings; instead, Playwright resolves them at runtime.
 - If a page changes significantly, an old snapshot may be misleading. Use `--fresh` to recapture before planning.
-- The default Gemini model is `gemini-2.5-pro`. If your key doesn't have access, set `GEMINI_MODEL` in `.env` to a supported model (e.g., `gemini-2.5-pro`).
+- Provider selection: set `LLM_PROVIDER=gemini` (default) or `LLM_PROVIDER=openai`.
+- For Gemini, default model is `gemini-2.5-pro`; override with `GEMINI_MODEL` as needed.
+- For OpenAI, default model is `gpt-4o-mini`; override with `OPENAI_MODEL`.
 
 ### Caching behavior and flags
 
