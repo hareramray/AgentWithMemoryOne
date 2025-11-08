@@ -28,6 +28,15 @@ export async function preflightDismiss(page: Page) {
         }
       } catch {}
     }
+    // Try common consent iframes (YouTube/Google)
+    for (const frame of page.frames()) {
+      try {
+        const fbtn = frame.getByRole('button', { name: /I agree|Accept all|Reject all|No thanks|Continue/i });
+        if (await fbtn.isVisible({ timeout: 300 }).catch(() => false)) {
+          await fbtn.click({ timeout: 1000 }).catch(() => {});
+        }
+      } catch {}
+    }
   } catch {
     // best-effort only
   }

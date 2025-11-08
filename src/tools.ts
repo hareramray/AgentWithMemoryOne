@@ -17,10 +17,66 @@ export async function executeToolCall(page: Page, url: string, instruction: stri
   try {
     switch (call.name) {
       case 'playwright.click': {
-        const loc = byRole(page, call.params.ref);
-        await loc.waitFor({ state: 'visible', timeout: 15000 });
-        await loc.click();
-        return { timestamp: start, instruction, ref: call.params.ref, action: 'click', outcome: 'success' };
+        const ref = call.params.ref;
+        let loc = byRole(page, ref);
+        try {
+          await loc.waitFor({ state: 'visible', timeout: 8000 });
+        } catch {
+          // Try to bring into view and retry
+          try { await loc.scrollIntoViewIfNeeded(); } catch {}
+          try { await loc.waitFor({ state: 'visible', timeout: 4000 }); } catch {}
+        }
+        // If still not visible/clickable, attempt generic, non site-specific fallbacks
+        let clicked = false;
+        if (!(await loc.isVisible().catch(() => false))) {
+          const name = ref.name;
+          if (name) {
+            // 1) aria-label or title match
+            const byAttr = page.locator(`[aria-label="${name}"] , [title="${name}"]`).first();
+            if (await byAttr.isVisible().catch(() => false)) {
+              await byAttr.click().catch(() => {});
+              clicked = true;
+            }
+            // 2) getByLabel / getByPlaceholder (common for inputs/buttons)
+            if (!clicked) {
+              const byLabel = page.getByLabel(name).first();
+              if (await byLabel.isVisible().catch(() => false)) {
+                await byLabel.click().catch(() => {});
+                clicked = true;
+              }
+            }
+            if (!clicked) {
+              const byPlaceholder = page.getByPlaceholder(name).first();
+              if (await byPlaceholder.isVisible().catch(() => false)) {
+                await byPlaceholder.click().catch(() => {});
+                clicked = true;
+              }
+            }
+            // 3) Clickable elements with the exact visible text
+            if (!clicked) {
+              const clickable = page.locator('button, [role="button"], a, [role="link"], [type="submit"], [role="menuitem"], [role="option"], [role="tab"]').filter({ hasText: name }).first();
+              if (await clickable.isVisible().catch(() => false)) {
+                await clickable.click().catch(() => {});
+                clicked = true;
+              }
+            }
+            // 4) As a last resort: find text anywhere, then click nearest clickable ancestor
+            if (!clicked) {
+              const textLoc = page.getByText(name, { exact: true }).first();
+              if (await textLoc.isVisible().catch(() => false)) {
+                const ancestor = textLoc.locator('xpath=ancestor-or-self::*[self::button or @role="button" or self::a or @role="link" or @role="menuitem" or @role="tab"][1]');
+                if (await ancestor.isVisible().catch(() => false)) {
+                  await ancestor.click().catch(() => {});
+                  clicked = true;
+                }
+              }
+            }
+          }
+        }
+        if (!clicked) {
+          await loc.click();
+        }
+        return { timestamp: start, instruction, ref, action: 'click', outcome: 'success' };
       }
       case 'playwright.type': {
         const { ref, value } = call.params;

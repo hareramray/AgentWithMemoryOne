@@ -1,0 +1,4 @@
+[
+  {"name":"playwright.type","params":{"ref":{"role":"combobox","name":"Search"},"value":"OpenAI"}},
+  {"name":"playwright.press","params":{"value":"Enter"}}
+]

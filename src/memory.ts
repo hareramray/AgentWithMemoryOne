@@ -23,7 +23,6 @@ export type SnapshotRecord = {
   axTree: any;
 };
 
-<<<<<<< HEAD
 export type Step = { action: 'click' | 'type' | 'press'; ref?: Ref; value?: string };
 
 export type CachedPlan = {
@@ -31,15 +30,6 @@ export type CachedPlan = {
   // Prefer multi-step plans; maintain backward compat with single-step plan
   steps?: Step[];
   plan?: { action: 'click' | 'type' | 'press'; ref: Ref; value?: string };
-=======
-export type CachedPlan = {
-  timestamp: number;
-  plan: {
-    action: 'click' | 'type' | 'press';
-    ref: Ref;
-    value?: string;
-  };
->>>>>>> 97dfd982b80a2c7e685e2aae966e02be7af3c0ca
 };
 
 export type MemoryData = {
@@ -107,16 +97,11 @@ export function normalizeInstruction(instr: string): string {
     .trim();
 }
 
-<<<<<<< HEAD
 export function cachePlan(url: string, instruction: string, plan: { action: 'click'|'type'|'press'; ref: Ref; value?: string } | { steps: Step[] }) {
-=======
-export function cachePlan(url: string, instruction: string, plan: { action: 'click'|'type'|'press'; ref: Ref; value?: string }) {
->>>>>>> 97dfd982b80a2c7e685e2aae966e02be7af3c0ca
   const mem = loadMemory();
   if (!mem.plans) (mem as any).plans = {} as MemoryData['plans'];
   if (!mem.plans[url]) mem.plans[url] = {};
   const key = normalizeInstruction(instruction);
-<<<<<<< HEAD
   const entry: CachedPlan = { timestamp: Date.now() };
   if ('steps' in plan) entry.steps = plan.steps;
   else entry.plan = plan;
@@ -136,14 +121,4 @@ export function getCachedPlan(url: string, instruction: string): ({ action: 'cli
 export function toSteps(input: { action: 'click'|'type'|'press'; ref: Ref; value?: string } | { steps: Step[] }): Step[] {
   if ('steps' in input) return input.steps;
   return [{ action: input.action, ref: input.ref, value: input.value }];
-=======
-  mem.plans[url][key] = { timestamp: Date.now(), plan };
-  saveMemory(mem);
-}
-
-export function getCachedPlan(url: string, instruction: string): { action: 'click'|'type'|'press'; ref: Ref; value?: string } | undefined {
-  const mem = loadMemory();
-  const entry = mem.plans?.[url]?.[normalizeInstruction(instruction)];
-  return entry?.plan;
->>>>>>> 97dfd982b80a2c7e685e2aae966e02be7af3c0ca
 }
